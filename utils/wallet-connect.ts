@@ -32,6 +32,7 @@ const DEFAULT_CONNECTION_TIMEOUT = 180_000; // 180 seconds
 let cachedWalletConnectClient: {
   walletConnectClient: WalletClient;
   isGnosis: boolean;
+  supportsWalletSendCalls: boolean;
 } | null = null;
 let cachedSignClient: Awaited<ReturnType<typeof SignClient.init>> | null = null;
 // TODO: fix this type
@@ -68,7 +69,7 @@ export const createWalletConnectClient = async () => {
       return cachedWalletConnectClient;
     }
 
-    const { session, accounts, isGnosis } =
+    const { session, accounts, isGnosis, supportsWalletSendCalls } =
       await connectWalletConnectWithRetry();
     logInfo('Found accounts:', accounts.length);
 
@@ -106,7 +107,11 @@ export const createWalletConnectClient = async () => {
     });
 
     // Cache the wallet connect client and account
-    cachedWalletConnectClient = { walletConnectClient, isGnosis };
+    cachedWalletConnectClient = {
+      walletConnectClient,
+      isGnosis,
+      supportsWalletSendCalls,
+    };
 
     return cachedWalletConnectClient;
   } catch (error) {
@@ -155,7 +160,12 @@ export const connectWalletConnectWithRetry = async (
 
 const connectWalletConnectWithTimeout = async (
   timeout: number,
-): Promise<{ session: any; accounts: string[]; isGnosis: boolean }> => {
+): Promise<{
+  session: any;
+  accounts: string[];
+  isGnosis: boolean;
+  supportsWalletSendCalls: boolean;
+}> => {
   // eslint-disable-next-line no-async-promise-executor
   return new Promise(async (resolve, reject) => {
     const timeoutId = setTimeout(() => {
@@ -232,6 +242,20 @@ const connectWalletConnect = async () => {
   logInfo(
     `Session expiration: ${new Date(session.expiry * 1000).toLocaleString()}`,
   );
+
+  const approvedMethods = session.namespaces.eip155?.methods || [];
+  logInfo('Approved methods:', approvedMethods.join(', '));
+
+  const supportsWalletSendCalls = approvedMethods.includes('wallet_sendCalls');
+  logInfo(
+    'Wallet supports wallet_sendCalls (EIP-5792):',
+    supportsWalletSendCalls,
+  );
+
+  if (!supportsWalletSendCalls) {
+    logInfo('⚠️  WARNING: wallet_sendCalls not approved by wallet');
+  }
+
   const isGnosis = isGnosisSafe(session.peer);
   if (isGnosis) {
     logInfo('Using Gnosis Safe to send transactions...');
@@ -246,6 +270,7 @@ const connectWalletConnect = async () => {
     session,
     accounts,
     isGnosis,
+    supportsWalletSendCalls,
   };
 };
 
