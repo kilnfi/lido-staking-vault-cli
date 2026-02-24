@@ -6,6 +6,7 @@ import {
   getOperatorGridContract,
   getPredepositGuaranteeContract,
   getStakingVaultContract,
+  getStethContract,
 } from 'contracts';
 import {
   mintShares,
@@ -1212,19 +1213,33 @@ dashboardWrite
 dashboardWrite
   .command('update-share-limit')
   .alias('usl')
-  .description('requests a change of share limit on the OperatorGrid')
+  .description(
+    'requests a change of share limit on the OperatorGrid (accepts stETH, converts to shares)',
+  )
   .argument('<address>', 'dashboard address', stringToAddress)
-  .argument('<shareLimit>', 'share limit', etherToWei)
-  .action(async (address: Address, shareLimit: bigint) => {
+  .argument('<shareLimit>', 'share limit (in stETH)', etherToWei)
+  .action(async (address: Address, shareLimitInSteth: bigint) => {
     const contract = await getDashboardContract(address);
+    const stethContract = await getStethContract();
     const vault = await callReadMethod({
       contract,
       methodName: 'stakingVault',
       payload: [],
     });
 
+    // Convert stETH amount to shares using on-chain rate
+    const shareLimit = await callReadMethodSilent({
+      contract: stethContract,
+      methodName: 'getSharesByPooledEth',
+      payload: [[shareLimitInSteth]],
+    });
+
+    logInfo(
+      `Converting ${formatEther(shareLimitInSteth)} stETH → ${formatEther(shareLimit)} shares`,
+    );
+
     const confirm = await confirmOperation(
-      `Are you sure you want to request a change of share limit on the OperatorGrid for the vault ${vault} to ${formatEther(shareLimit)}?`,
+      `Are you sure you want to request a change of share limit on the OperatorGrid for the vault ${vault} to ${formatEther(shareLimitInSteth)} stETH (${formatEther(shareLimit)} shares)?`,
     );
     if (!confirm) return;
 

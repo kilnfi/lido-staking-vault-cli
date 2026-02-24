@@ -3,6 +3,7 @@ import { Option } from 'commander';
 import {
   getDashboardContract,
   getOperatorGridContract,
+  getStethContract,
   getVaultHubContract,
 } from 'contracts';
 import {
@@ -38,15 +39,27 @@ operatorGridWrite
   .argument('<tierId>', 'tier id', stringToBigInt)
   .argument(
     '<requestedShareLimit>',
-    'requested share limit (in shares)',
+    'requested share limit (in stETH)',
     etherToWei,
   )
   .action(
-    async (vault: Address, tierId: bigint, requestedShareLimit: bigint) => {
+    async (
+      vault: Address,
+      tierId: bigint,
+      requestedShareLimitInSteth: bigint,
+    ) => {
       const operatorGridContract = await getOperatorGridContract();
+      const stethContract = await getStethContract();
+
+      // Convert stETH amount to shares using on-chain rate
+      const requestedShareLimit = await callReadMethodSilent({
+        contract: stethContract,
+        methodName: 'getSharesByPooledEth',
+        payload: [[requestedShareLimitInSteth]],
+      });
 
       const confirm = await confirmOperation(
-        `Are you sure you want to request change tier ${tierId} for vault ${vault} with requested share limit ${formatEther(requestedShareLimit)}?`,
+        `Are you sure you want to request change tier ${tierId} for vault ${vault} with requested share limit ${formatEther(requestedShareLimitInSteth)} stETH (${formatEther(requestedShareLimit)} shares)?`,
       );
       if (!confirm) return;
 
@@ -81,18 +94,32 @@ operatorGridWrite
 operatorGridWrite
   .command('update-vault-share-limit')
   .alias('usl')
-  .description('update vault share limit')
+  .description(
+    'update vault share limit (accepts stETH amount, converts to shares)',
+  )
   .argument('<vault>', 'vault address', stringToAddress)
   .argument(
     '<requestedShareLimit>',
-    'requested share limit (in shares)',
+    'requested share limit (in stETH)',
     etherToWei,
   )
-  .action(async (vault: Address, requestedShareLimit: bigint) => {
+  .action(async (vault: Address, requestedShareLimitInSteth: bigint) => {
     const operatorGridContract = await getOperatorGridContract();
+    const stethContract = await getStethContract();
+
+    // Convert stETH amount to shares using on-chain rate
+    const requestedShareLimit = await callReadMethodSilent({
+      contract: stethContract,
+      methodName: 'getSharesByPooledEth',
+      payload: [[requestedShareLimitInSteth]],
+    });
+
+    logInfo(
+      `Converting ${formatEther(requestedShareLimitInSteth)} stETH → ${formatEther(requestedShareLimit)} shares`,
+    );
 
     const confirm = await confirmOperation(
-      `Are you sure you want to update the share limit of the vault ${vault} to ${formatEther(requestedShareLimit)}?`,
+      `Are you sure you want to update the share limit of the vault ${vault} to ${formatEther(requestedShareLimitInSteth)} stETH (${formatEther(requestedShareLimit)} shares)?`,
     );
     if (!confirm) return;
 
