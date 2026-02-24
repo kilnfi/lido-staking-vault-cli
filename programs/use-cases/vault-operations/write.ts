@@ -31,7 +31,7 @@ import {
   checkIsReportFreshThrowError,
 } from 'features';
 import { getAccount } from 'providers';
-import { getOperatorGridContract } from 'contracts';
+import { getOperatorGridContract, getStethContract } from 'contracts';
 import { RoleAssignment } from 'types';
 
 import { vaultOperations } from './main.js';
@@ -425,7 +425,7 @@ vaultOperationsWrite
   .argument('<tierId>', 'tier id to change to', stringToBigInt)
   .option(
     '-r, --requestedShareLimit <string>',
-    'requested share limit (in shares)',
+    'requested share limit (in stETH)',
     etherToWei,
   )
   .option('-v, --vault <string>', 'vault address', stringToAddress)
@@ -433,7 +433,7 @@ vaultOperationsWrite
     async (
       tierId: bigint,
       {
-        requestedShareLimit,
+        requestedShareLimit: requestedShareLimitInSteth,
         vault,
       }: { requestedShareLimit: bigint; vault: Address },
     ) => {
@@ -442,6 +442,7 @@ vaultOperationsWrite
           vault,
         });
       const operatorGridContract = await getOperatorGridContract();
+      const stethContract = await getStethContract();
 
       const vaultNodeOperator = await callReadMethodSilent({
         contract: vaultContract,
@@ -457,9 +458,20 @@ vaultOperationsWrite
       const tierShareLimit = tierInfo.shareLimit;
       let currentShareLimit = tierShareLimit;
 
-      if (requestedShareLimit) {
+      if (requestedShareLimitInSteth) {
+        // Convert stETH amount to shares using on-chain rate
+        const requestedShareLimit = await callReadMethodSilent({
+          contract: stethContract,
+          methodName: 'getSharesByPooledEth',
+          payload: [[requestedShareLimitInSteth]],
+        });
+
+        logInfo(
+          `Converting ${formatEther(requestedShareLimitInSteth)} stETH → ${formatEther(requestedShareLimit)} shares`,
+        );
+
         const confirmShareLimit = await confirmOperation(
-          `Are you sure you want to request change share limit for vault ${vaultAddress} to ${formatEther(requestedShareLimit)} shares (requested tier share limit is ${formatEther(tierShareLimit)} shares)?`,
+          `Are you sure you want to request change share limit for vault ${vaultAddress} to ${formatEther(requestedShareLimitInSteth)} stETH (${formatEther(requestedShareLimit)} shares)? (tier share limit is ${formatEther(tierShareLimit)} shares)`,
         );
         if (!confirmShareLimit) return;
 
@@ -494,7 +506,7 @@ vaultOperationsWrite
   .argument('<tierId>', 'tier id to change to', stringToBigInt)
   .option(
     '-r, --requestedShareLimit <string>',
-    'requested share limit (in shares)',
+    'requested share limit (in stETH)',
     etherToWei,
   )
   .option('-v, --vault <string>', 'vault address', stringToAddress)
@@ -502,7 +514,7 @@ vaultOperationsWrite
     async (
       tierId: bigint,
       {
-        requestedShareLimit,
+        requestedShareLimit: requestedShareLimitInSteth,
         vault,
       }: { requestedShareLimit: bigint; vault: Address },
     ) => {
@@ -511,6 +523,7 @@ vaultOperationsWrite
           vault,
         });
       const operatorGridContract = await getOperatorGridContract();
+      const stethContract = await getStethContract();
       const tierInfo = await callReadMethodSilent({
         contract: operatorGridContract,
         methodName: 'tier',
@@ -520,9 +533,20 @@ vaultOperationsWrite
       const tierShareLimit = tierInfo.shareLimit;
 
       let currentShareLimit = tierShareLimit;
-      if (requestedShareLimit) {
+      if (requestedShareLimitInSteth) {
+        // Convert stETH amount to shares using on-chain rate
+        const requestedShareLimit = await callReadMethodSilent({
+          contract: stethContract,
+          methodName: 'getSharesByPooledEth',
+          payload: [[requestedShareLimitInSteth]],
+        });
+
+        logInfo(
+          `Converting ${formatEther(requestedShareLimitInSteth)} stETH → ${formatEther(requestedShareLimit)} shares`,
+        );
+
         const confirmShareLimit = await confirmOperation(
-          `Are you sure you want to request change share limit for vault ${vaultAddress} to ${formatEther(requestedShareLimit)} shares (requested tier share limit is ${formatEther(tierShareLimit)} shares)?`,
+          `Are you sure you want to request change share limit for vault ${vaultAddress} to ${formatEther(requestedShareLimitInSteth)} stETH (${formatEther(requestedShareLimit)} shares)? (tier share limit is ${formatEther(tierShareLimit)} shares)`,
         );
         if (!confirmShareLimit) return;
 
